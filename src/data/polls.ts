@@ -37,7 +37,11 @@ export async function upsertVote(
   });
 }
 
-export async function removeVote(pollId: string, userId: string, optionIdx: number) {
+export async function removeVote(
+  pollId: string,
+  userId: string,
+  optionIdx: number,
+) {
   return prisma.pollVote.deleteMany({
     where: { pollId, userId, optionIdx },
   });

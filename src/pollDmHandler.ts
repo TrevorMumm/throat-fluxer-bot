@@ -1,16 +1,20 @@
-import type { BotClient, MessageCreatePayload } from "./types/command.js";
-import {
-  getSession,
-  updateSession,
-  deleteSession,
-} from "./pollSession.js";
 import { createPoll, setPollMessageId } from "./data/polls.js";
+import { deleteSession, getSession, updateSession } from "./pollSession.js";
+import type { BotClient, MessageCreatePayload } from "./types/command.js";
 
 // ── Number emojis for reaction-based voting ─────────────────────────
 
 const NUMBER_EMOJIS = [
-  "1\u20E3", "2\u20E3", "3\u20E3", "4\u20E3", "5\u20E3",
-  "6\u20E3", "7\u20E3", "8\u20E3", "9\u20E3", "\uD83D\uDD1F",
+  "1\u20E3",
+  "2\u20E3",
+  "3\u20E3",
+  "4\u20E3",
+  "5\u20E3",
+  "6\u20E3",
+  "7\u20E3",
+  "8\u20E3",
+  "9\u20E3",
+  "\uD83D\uDD1F",
 ];
 
 // ── Embed builders ──────────────────────────────────────────────────
@@ -34,9 +38,10 @@ export function buildPollEmbed(
     return `${emoji}  **${opt}**`;
   });
 
-  const footer = totalVotes > 0
-    ? `\n\n*Total votes: ${totalVotes}*`
-    : "\n\n*Vote by reacting!*";
+  const footer =
+    totalVotes > 0
+      ? `\n\n*Total votes: ${totalVotes}*`
+      : "\n\n*Vote by reacting!*";
 
   return {
     title: `\uD83D\uDCCA  ${question}`,
@@ -94,13 +99,15 @@ export async function handlePollDM(
 
       if (options.length < 2) {
         await client.api.channels.createMessage(channelId, {
-          content: "You need at least **2** options. Please try again, separated by commas.",
+          content:
+            "You need at least **2** options. Please try again, separated by commas.",
         });
         return;
       }
       if (options.length > 10) {
         await client.api.channels.createMessage(channelId, {
-          content: "Maximum of **10** options allowed (one per reaction emoji). Please try again with fewer options.",
+          content:
+            "Maximum of **10** options allowed (one per reaction emoji). Please try again with fewer options.",
         });
         return;
       }
@@ -141,7 +148,8 @@ export async function handlePollDM(
       if (lower === "2") {
         updateSession(userId, { state: "editing_options" });
         await client.api.channels.createMessage(channelId, {
-          content: "Enter the new poll options, separated by commas, or **cancel** to cancel:",
+          content:
+            "Enter the new poll options, separated by commas, or **cancel** to cancel:",
         });
         return;
       }
@@ -177,11 +185,15 @@ export async function handlePollDM(
     // ── Step 3b: pick guild ──
     case "awaiting_guild": {
       try {
-        const guilds = (await client.api.users.getGuilds()) as unknown as { id: string; name: string }[];
+        const guilds = (await client.api.users.getGuilds()) as unknown as {
+          id: string;
+          name: string;
+        }[];
         const idx = Number.parseInt(text, 10) - 1;
         if (Number.isNaN(idx) || idx < 0 || idx >= guilds.length) {
           await client.api.channels.createMessage(channelId, {
-            content: "Invalid selection. Please enter the number of the server.",
+            content:
+              "Invalid selection. Please enter the number of the server.",
           });
           return;
         }
@@ -208,7 +220,8 @@ export async function handlePollDM(
 
         if (Number.isNaN(idx) || idx < 0 || idx >= textChannels.length) {
           await client.api.channels.createMessage(channelId, {
-            content: "Invalid selection. Please enter the number of the channel.",
+            content:
+              "Invalid selection. Please enter the number of the channel.",
           });
           return;
         }
@@ -234,7 +247,10 @@ async function promptGuildSelection(
   userId?: string,
 ) {
   try {
-    const guilds = (await client.api.users.getGuilds()) as unknown as { id: string; name: string }[];
+    const guilds = (await client.api.users.getGuilds()) as unknown as {
+      id: string;
+      name: string;
+    }[];
     if (guilds.length === 0) {
       await client.api.channels.createMessage(dmChannelId, {
         content: "I'm not in any servers! Invite me to a server first.",
@@ -268,7 +284,9 @@ async function promptChannelSelection(
   guildId: string,
 ) {
   try {
-    const channels = (await client.api.guilds.getChannels(guildId)) as unknown as { id: string; name: string; type: number }[];
+    const channels = (await client.api.guilds.getChannels(
+      guildId,
+    )) as unknown as { id: string; name: string; type: number }[];
     const textChannels = channels.filter((c) => c.type === 0);
 
     if (textChannels.length === 0) {

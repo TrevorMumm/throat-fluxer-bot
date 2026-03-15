@@ -28,10 +28,7 @@ export function getSession(userId: string): PollSession | undefined {
   return session;
 }
 
-export function createSession(
-  userId: string,
-  guildId?: string,
-): PollSession {
+export function createSession(userId: string, guildId?: string): PollSession {
   const session: PollSession = {
     state: "awaiting_question",
     guildId,

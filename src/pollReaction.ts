@@ -1,11 +1,19 @@
-import type { BotClient } from "./types/command.js";
-import { getPoll, upsertVote, removeVote, getVoteCounts } from "./data/polls.js";
-import { buildPollEmbed } from "./pollDmHandler.js";
+import { getVoteCounts, removeVote, upsertVote } from "./data/polls.js";
 import { prisma } from "./db/client.js";
+import { buildPollEmbed } from "./pollDmHandler.js";
+import type { BotClient } from "./types/command.js";
 
 const NUMBER_EMOJIS = [
-  "1\u20E3", "2\u20E3", "3\u20E3", "4\u20E3", "5\u20E3",
-  "6\u20E3", "7\u20E3", "8\u20E3", "9\u20E3", "\uD83D\uDD1F",
+  "1\u20E3",
+  "2\u20E3",
+  "3\u20E3",
+  "4\u20E3",
+  "5\u20E3",
+  "6\u20E3",
+  "7\u20E3",
+  "8\u20E3",
+  "9\u20E3",
+  "\uD83D\uDD1F",
 ];
 
 function emojiToIndex(emoji: string): number {
@@ -114,7 +122,12 @@ export async function handlePollReaction(
   }
 
   // Ensure all bot reactions are still present
-  await ensureBotReactions(client, reaction.channel_id, reaction.message_id, poll.options.length);
+  await ensureBotReactions(
+    client,
+    reaction.channel_id,
+    reaction.message_id,
+    poll.options.length,
+  );
 }
 
 /**

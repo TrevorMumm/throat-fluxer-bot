@@ -1,6 +1,10 @@
+import {
+  cancelReminder,
+  createReminder,
+  getUserReminders,
+} from "../data/reminders.js";
+import { parseTime } from "../parseTime.js";
 import type { Command } from "../types/command.js";
-import { parseTime, formatDuration } from "../parseTime.js";
-import { createReminder, getUserReminders, cancelReminder } from "../data/reminders.js";
 
 const MAX_DURATION_MS = 365 * 24 * 60 * 60 * 1000; // 1 year
 const MAX_MESSAGE_LENGTH = 512;
@@ -30,7 +34,8 @@ export const execute: Command["execute"] = async (
 
     const lines = reminders.map((r, i) => {
       const timestamp = Math.floor(r.remindAt.getTime() / 1000);
-      const preview = r.message.length > 60 ? `${r.message.slice(0, 57)}...` : r.message;
+      const preview =
+        r.message.length > 60 ? `${r.message.slice(0, 57)}...` : r.message;
       return `**${i + 1}.** (ID: ${r.id}) <t:${timestamp}:R> — ${preview}`;
     });
 
@@ -45,7 +50,8 @@ export const execute: Command["execute"] = async (
     const id = Number.parseInt(args[1], 10);
     if (!id || Number.isNaN(id)) {
       await client.api.channels.createMessage(message.channel_id, {
-        content: "Please provide a valid reminder ID. Use `!remindme list` to see your reminders.",
+        content:
+          "Please provide a valid reminder ID. Use `!remindme list` to see your reminders.",
       });
       return;
     }
@@ -103,11 +109,10 @@ export const execute: Command["execute"] = async (
   }
 
   // Extract the message part (everything after the time tokens)
-  const timeTokenRegex = /(\d+)\s*(s|sec|seconds?|m|min|minutes?|h|hrs?|hours?|d|days?|w|weeks?)/gi;
-  const reminderMessage = args
-    .join(" ")
-    .replace(timeTokenRegex, "")
-    .trim() || "No message set";
+  const timeTokenRegex =
+    /(\d+)\s*(s|sec|seconds?|m|min|minutes?|h|hrs?|hours?|d|days?|w|weeks?)/gi;
+  const reminderMessage =
+    args.join(" ").replace(timeTokenRegex, "").trim() || "No message set";
 
   if (reminderMessage.length > MAX_MESSAGE_LENGTH) {
     await client.api.channels.createMessage(message.channel_id, {

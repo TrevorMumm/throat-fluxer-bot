@@ -20,7 +20,7 @@ export const execute: Command["execute"] = async (
     "> `!remindme 1d12h submit report` — 1 day and 12 hours\n" +
     "> `!remindme 1w review PR` — 1 week\n\n" +
     "`!insult` — Generate a random insult. Can be used in a server channel or DM.\n\n";
-  
+
   await client.api.channels.createMessage(message.channel_id, {
     content: helpText,
   });

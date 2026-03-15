@@ -1,4 +1,5 @@
-const TIME_REGEX = /(\d+)\s*(s|sec|seconds?|m|min|minutes?|h|hrs?|hours?|d|days?|w|weeks?)/gi;
+const TIME_REGEX =
+  /(\d+)\s*(s|sec|seconds?|m|min|minutes?|h|hrs?|hours?|d|days?|w|weeks?)/gi;
 
 const UNIT_SECONDS: Record<string, number> = {
   s: 1,

@@ -2,10 +2,13 @@ import { type Client, GatewayDispatchEvents } from "@discordjs/core";
 import { loadCommands } from "./commandLoader.js";
 import { recordCommandInvocation } from "./data/commandInvocations.js";
 import { getGuildPrefix } from "./data/guildSettings.js";
-import { normalizePrefix } from "./prefix.js";
-import { getSession } from "./pollSession.js";
 import { handlePollDM } from "./pollDmHandler.js";
-import { handlePollReaction, handlePollReactionRemove } from "./pollReaction.js";
+import {
+  handlePollReaction,
+  handlePollReactionRemove,
+} from "./pollReaction.js";
+import { getSession } from "./pollSession.js";
+import { normalizePrefix } from "./prefix.js";
 
 const DEFAULT_PREFIX = normalizePrefix(process.env.COMMAND_PREFIX, "!");
 
@@ -119,7 +122,10 @@ export async function registerHandlers(client: Client): Promise<void> {
           channel_id: data.channel_id,
           message_id: data.message_id,
           user_id: data.user_id,
-          emoji: { name: data.emoji.name ?? undefined, id: data.emoji.id ?? undefined },
+          emoji: {
+            name: data.emoji.name ?? undefined,
+            id: data.emoji.id ?? undefined,
+          },
         },
         botId,
       );
@@ -137,7 +143,10 @@ export async function registerHandlers(client: Client): Promise<void> {
           channel_id: data.channel_id,
           message_id: data.message_id,
           user_id: data.user_id,
-          emoji: { name: data.emoji.name ?? undefined, id: data.emoji.id ?? undefined },
+          emoji: {
+            name: data.emoji.name ?? undefined,
+            id: data.emoji.id ?? undefined,
+          },
         },
         botId,
       );

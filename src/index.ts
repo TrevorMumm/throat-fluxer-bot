@@ -5,7 +5,10 @@ import { createFluxerClient } from "./fluxerClient.js";
 import { runGatewayLoop } from "./gatewayLoop.js";
 import { registerHandlers } from "./handlers.js";
 import { registerProcessHandlers } from "./process.js";
-import { startReminderScheduler, stopReminderScheduler } from "./reminderScheduler.js";
+import {
+  startReminderScheduler,
+  stopReminderScheduler,
+} from "./reminderScheduler.js";
 
 async function main() {
   const token = assertTokenPresent(BOT_TOKEN);

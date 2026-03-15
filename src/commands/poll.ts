@@ -1,5 +1,5 @@
-import type { Command } from "../types/command.js";
 import { createSession } from "../pollSession.js";
+import type { Command } from "../types/command.js";
 
 export const name: Command["name"] = "poll";
 
@@ -27,19 +27,29 @@ export const execute: Command["execute"] = async (
           "Type **cancel** at any time to cancel.",
       });
 
-      const botReply = await client.api.channels.createMessage(message.channel_id, {
-        content: "Check your DMs! I've sent you a message to set up your poll.",
-      });
+      const botReply = await client.api.channels.createMessage(
+        message.channel_id,
+        {
+          content:
+            "Check your DMs! I've sent you a message to set up your poll.",
+        },
+      );
 
       // Clean up both the user's command and the bot's reply from the server channel
       setTimeout(async () => {
         try {
-          await client.api.channels.deleteMessage(message.channel_id, message.id);
+          await client.api.channels.deleteMessage(
+            message.channel_id,
+            message.id,
+          );
         } catch (e) {
           console.error("Failed to delete user's !poll message:", e);
         }
         try {
-          await client.api.channels.deleteMessage(message.channel_id, (botReply as any).id);
+          await client.api.channels.deleteMessage(
+            message.channel_id,
+            (botReply as any).id,
+          );
         } catch (e) {
           console.error("Failed to delete bot's DM notice:", e);
         }
