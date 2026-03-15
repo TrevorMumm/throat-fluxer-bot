@@ -8,9 +8,11 @@ export function createFluxerClient(token: string): {
   gateway: WebSocketManager;
   client: Client;
 } {
-  const rest = new REST({ version: API_VERSION, api: API_BASE_URL }).setToken(
-    token,
-  );
+  const rest = new REST({
+    version: API_VERSION,
+    api: API_BASE_URL,
+    headers: { "X-Forwarded-For": "127.0.0.1" },
+  }).setToken(token);
 
   const gateway = new WebSocketManager({
     token,

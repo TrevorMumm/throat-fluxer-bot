@@ -5,6 +5,7 @@ import { createFluxerClient } from "./fluxerClient.js";
 import { runGatewayLoop } from "./gatewayLoop.js";
 import { registerHandlers } from "./handlers.js";
 import { registerProcessHandlers } from "./process.js";
+import { startReminderScheduler, stopReminderScheduler } from "./reminderScheduler.js";
 
 async function main() {
   const token = assertTokenPresent(BOT_TOKEN);
@@ -12,7 +13,11 @@ async function main() {
   await connectDb();
   await registerHandlers(client);
 
-  const { shouldStop } = registerProcessHandlers(disconnectDb);
+  startReminderScheduler(client);
+  const { shouldStop } = registerProcessHandlers(() => {
+    stopReminderScheduler();
+    return disconnectDb();
+  });
   await runGatewayLoop(gateway, shouldStop);
 }
 

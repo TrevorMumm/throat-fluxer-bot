@@ -3,6 +3,7 @@ import type { Client } from "@discordjs/core";
 export type BotClient = Client;
 // Structural shape to avoid type identity conflicts from multiple discord-api-types copies.
 export type MessageCreatePayload = {
+  id: string;
   channel_id: string;
   content: string;
   guild_id?: string;

@@ -3,6 +3,9 @@ import { loadCommands } from "./commandLoader.js";
 import { recordCommandInvocation } from "./data/commandInvocations.js";
 import { getGuildPrefix } from "./data/guildSettings.js";
 import { normalizePrefix } from "./prefix.js";
+import { getSession } from "./pollSession.js";
+import { handlePollDM } from "./pollDmHandler.js";
+import { handlePollReaction, handlePollReactionRemove } from "./pollReaction.js";
 
 const DEFAULT_PREFIX = normalizePrefix(process.env.COMMAND_PREFIX, "!");
 
@@ -36,7 +39,27 @@ export async function registerHandlers(client: Client): Promise<void> {
 
   client.on(GatewayDispatchEvents.MessageCreate, async ({ data: message }) => {
     if (message.author?.bot) return;
+
     const guildId = message.guild_id;
+
+    // ── Poll DM session routing ──
+    // If this is a DM and the user has an active poll session,
+    // route to the poll handler instead of treating it as a command.
+    if (!guildId && message.author?.id) {
+      const session = getSession(message.author.id);
+      if (session) {
+        // Still allow !poll to restart, but route everything else to poll handler
+        const trimmed = message.content.trim().toLowerCase();
+        const prefix = normalizePrefix(undefined, DEFAULT_PREFIX) ?? "!";
+        if (trimmed === `${prefix}poll`) {
+          // Let it fall through to command handling below
+        } else {
+          await handlePollDM(client, message as never);
+          return;
+        }
+      }
+    }
+
     const guildPrefix = guildId ? await getGuildPrefix(guildId) : null;
     const prefix = normalizePrefix(guildPrefix ?? undefined, DEFAULT_PREFIX);
     if (!prefix) return;
@@ -85,5 +108,41 @@ export async function registerHandlers(client: Client): Promise<void> {
     }
 
     await command.execute(client, message, args);
+  });
+
+  // ── Reaction handler (poll voting) ──
+  client.on(GatewayDispatchEvents.MessageReactionAdd, async ({ data }) => {
+    try {
+      await handlePollReaction(
+        client,
+        {
+          channel_id: data.channel_id,
+          message_id: data.message_id,
+          user_id: data.user_id,
+          emoji: { name: data.emoji.name ?? undefined, id: data.emoji.id ?? undefined },
+        },
+        botId,
+      );
+    } catch (error) {
+      console.error("Failed to handle poll reaction:", error);
+    }
+  });
+
+  // ── Reaction remove handler (poll vote removal) ──
+  client.on(GatewayDispatchEvents.MessageReactionRemove, async ({ data }) => {
+    try {
+      await handlePollReactionRemove(
+        client,
+        {
+          channel_id: data.channel_id,
+          message_id: data.message_id,
+          user_id: data.user_id,
+          emoji: { name: data.emoji.name ?? undefined, id: data.emoji.id ?? undefined },
+        },
+        botId,
+      );
+    } catch (error) {
+      console.error("Failed to handle poll reaction removal:", error);
+    }
   });
 }

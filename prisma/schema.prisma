@@ -27,3 +27,43 @@ model CommandInvocation {
   @@index([command, createdAt])
   @@index([guildId, createdAt])
 }
+
+model Poll {
+  id        String     @id @default(cuid())
+  question  String
+  options   String[]
+  guildId   String
+  channelId String
+  messageId String?
+  creatorId String
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  votes     PollVote[]
+}
+
+model PollVote {
+  id        Int      @id @default(autoincrement())
+  pollId    String
+  userId    String
+  optionIdx Int
+  createdAt DateTime @default(now())
+
+  poll Poll @relation(fields: [pollId], references: [id])
+
+  @@unique([pollId, userId])
+  @@index([pollId])
+}
+
+model Reminder {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  channelId String
+  guildId   String?
+  message   String
+  remindAt  DateTime
+  fired     Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([fired, remindAt])
+  @@index([userId])
+}

@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-export const API_BASE_URL = "https://api.fluxer.app";
+export const API_BASE_URL = "http://localhost:49319/api";
 export const API_VERSION = "1";
 export const GATEWAY_VERSION = "1";
 
