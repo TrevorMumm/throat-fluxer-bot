@@ -1,3 +1,4 @@
+import { createPurgeSession } from "../purgeSession.js";
 import type {
   BotClient,
   Command,
@@ -23,11 +24,23 @@ export async function execute(
     return;
   }
 
+  // ── Purge all ──
+  if (args[0]?.toLowerCase() === "all") {
+    if (!message.author?.id) return;
+    createPurgeSession(message.author.id, message.channel_id);
+    await client.api.channels.createMessage(message.channel_id, {
+      content:
+        "**THIS WILL DELETE ALL THE MESSAGES IN THIS CHANNEL, ARE YOU SURE YOU WANT TO DO THIS?(y/n)**",
+    });
+    return;
+  }
+
   const count = Number(args[0]);
 
   if (!args[0] || !Number.isInteger(count) || count < 1) {
     await client.api.channels.createMessage(message.channel_id, {
-      content: "Usage: `!purge <number>` — number must be between 1 and 100.",
+      content:
+        "Usage: `!purge <number>` or `!purge all` — number must be between 1 and 100.",
     });
     return;
   }

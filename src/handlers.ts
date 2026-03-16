@@ -9,6 +9,8 @@ import {
 } from "./pollReaction.js";
 import { getSession } from "./pollSession.js";
 import { normalizePrefix } from "./prefix.js";
+import { handlePurgeReply } from "./purgeAllHandler.js";
+import { getPurgeSession } from "./purgeSession.js";
 
 const DEFAULT_PREFIX = normalizePrefix(process.env.COMMAND_PREFIX, "!");
 
@@ -60,6 +62,17 @@ export async function registerHandlers(client: Client): Promise<void> {
           await handlePollDM(client, message as never);
           return;
         }
+      }
+    }
+
+    // ── Purge-all session routing ──
+    // If the user has an active purge-all confirmation session in this channel,
+    // route their reply to the purge handler before treating it as a command.
+    if (guildId && message.author?.id) {
+      const purgeSession = getPurgeSession(message.author.id, message.channel_id);
+      if (purgeSession) {
+        const consumed = await handlePurgeReply(client, message as never);
+        if (consumed) return;
       }
     }
 
