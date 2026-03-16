@@ -67,3 +67,15 @@ model Reminder {
   @@index([fired, remindAt])
   @@index([userId])
 }
+
+model BlackjackStats {
+  id        Int      @id @default(autoincrement())
+  userId    String   @unique
+  wins      Int      @default(0)
+  losses    Int      @default(0)
+  pushes    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
