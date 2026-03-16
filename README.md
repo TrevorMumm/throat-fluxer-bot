@@ -1,6 +1,17 @@
 # fluxer-bot
 
-Fluxer is a Discord-compatible community platform. This repo contains a small bot that connects to Fluxer's REST + Gateway APIs and replies with `pong` when a user sends `!ping`.
+Fluxer is a Discord-compatible community platform. This repo contains a small bot that connects to Fluxer's REST + Gateway APIs.
+
+## Current Commands implemented
+!help — Show this help message. Can be used in a server channel or DM.
+!ping — Check if the bot is online. Can be used in a server channel or DM.
+!poll — Start creating a poll. Send this command via DM to the bot, or use it in a server channel and the bot will DM you to walk through the setup.
+!remindme <time> <message> — Set a reminder. The <time> field accepts units like s (seconds), m (minutes), h (hours), d (days), and w (weeks). You can combine them together.
+!remindme list — View your active reminders.
+!remindme cancel <id> — Cancel a reminder by its ID (shown when created or in !remindme list).
+!insult — Generate a random insult. Can be used in a server channel or DM.
+!pasta — Post a random copypasta from Reddit. Can be used in a server channel or DM.
+!purge <number> — Delete the specified number of messages from the channel (max 100). Server only.
 
 ## Architecture
 
