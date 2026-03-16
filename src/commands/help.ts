@@ -7,7 +7,7 @@ export const execute: Command["execute"] = async (
   message,
 ): Promise<void> => {
   const helpText =
-    "**Fluxer Bot Commands**\n" +
+    "**Throat Bot Commands**\n" +
     "`!help` — Show this help message. Can be used in a server channel or DM.\n\n" +
     "`!ping` — Check if the bot is online. Can be used in a server channel or DM.\n\n" +
     "`!poll` — Start creating a poll. Send this command via DM to the bot, or use it in a server channel and the bot will DM you to walk through the setup.\n\n" +
@@ -19,7 +19,9 @@ export const execute: Command["execute"] = async (
     "> `!remindme 2h check the oven` — 2 hours\n" +
     "> `!remindme 1d12h submit report` — 1 day and 12 hours\n" +
     "> `!remindme 1w review PR` — 1 week\n\n" +
-    "`!insult` — Generate a random insult. Can be used in a server channel or DM.\n\n";
+    "`!insult` — Generate a random insult. Can be used in a server channel or DM.\n\n" +
+    "`!pasta` — Post a random copypasta from Reddit. Can be used in a server channel or DM.\n\n" +
+    "`!purge <number>` — Delete the specified number of messages from the channel (max 100). Server only.\n\n";
 
   await client.api.channels.createMessage(message.channel_id, {
     content: helpText,
