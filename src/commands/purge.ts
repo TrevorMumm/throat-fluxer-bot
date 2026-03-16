@@ -39,57 +39,63 @@ export async function execute(
     return;
   }
 
+  let fetched: { id: string }[];
   try {
-    // Fetch messages before the purge command (the +1 accounts for the command message itself)
-    const fetched = await client.api.channels.getMessages(message.channel_id, {
+    fetched = await client.api.channels.getMessages(message.channel_id, {
       limit: count + 1,
     });
+  } catch (error) {
+    console.error("Failed to fetch messages:", error);
+    await client.api.channels.createMessage(message.channel_id, {
+      content:
+        "Failed to fetch messages. Make sure I have the **Read Message History** permission.",
+    });
+    return;
+  }
 
-    // Include the purge command message and the requested number of messages before it
-    const messageIds = fetched.map((m: { id: string }) => m.id);
+  const messageIds = fetched.map((m) => m.id);
 
-    if (messageIds.length === 0) {
-      await client.api.channels.createMessage(message.channel_id, {
-        content: "No messages found to delete.",
-      });
-      return;
-    }
+  if (messageIds.length === 0) {
+    await client.api.channels.createMessage(message.channel_id, {
+      content: "No messages found to delete.",
+    });
+    return;
+  }
 
-    if (messageIds.length === 1) {
+  try {
+    // Delete messages one by one — the local API may not support bulk delete
+    await Promise.all(
+      messageIds.map((id) =>
+        client.api.channels.deleteMessage(message.channel_id, id),
+      ),
+    );
+  } catch (error) {
+    console.error("Failed to delete messages:", error);
+    await client.api.channels.createMessage(message.channel_id, {
+      content:
+        "Failed to delete messages. Make sure I have the **Manage Messages** permission.",
+    });
+    return;
+  }
+
+  // Subtract 1 because the purge command itself is included
+  const purgedCount = messageIds.length - 1;
+
+  const confirmation = await client.api.channels.createMessage(
+    message.channel_id,
+    {
+      content: `${purgedCount} messages have been purged from chat history.`,
+    },
+  );
+
+  setTimeout(async () => {
+    try {
       await client.api.channels.deleteMessage(
         message.channel_id,
-        messageIds[0],
+        confirmation.id,
       );
-    } else {
-      await client.api.channels.bulkDeleteMessages(
-        message.channel_id,
-        messageIds,
-      );
+    } catch {
+      // Confirmation message may already be deleted
     }
-
-    const purgedCount = messageIds.length - 1;
-
-    const confirmation = await client.api.channels.createMessage(
-      message.channel_id,
-      {
-        content: `${purgedCount} messages have been purged from chat history.`,
-      },
-    );
-
-    setTimeout(async () => {
-      try {
-        await client.api.channels.deleteMessage(
-          message.channel_id,
-          confirmation.id,
-        );
-      } catch {
-        // Confirmation message may already be deleted
-      }
-    }, CONFIRMATION_DELAY_MS);
-  } catch (error) {
-    console.error("Failed to purge messages:", error);
-    await client.api.channels.createMessage(message.channel_id, {
-      content: "Failed to purge messages. Make sure I have the Manage Messages permission.",
-    });
-  }
+  }, CONFIRMATION_DELAY_MS);
 }
