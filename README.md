@@ -42,6 +42,31 @@ Create a `.env` file based on `.env.example`.
 | `COMMAND_PREFIX` | No | Default command prefix when a guild override is not set |
 | `PREFIX_CACHE_TTL_SECONDS` | No | Cache TTL (seconds) for per-guild prefixes (default 300) |
 
+## Self Hosting
+
+You must edit config.ts and fluxerClient.ts with the correct endpoints of your self hosted fluxer instance
+1. config.ts:5 — API base URL
+- Replace http://localhost:49319/api with public facing endpoint if you are not running the bot from the same place as the server
+- Changed from the production API to your local instance:
+```diff
+- export const API_BASE_URL = "https://api.fluxer.app";
++ export const API_BASE_URL = "http://localhost:49319/api";
+```
+2. fluxerClient.ts:14 — Added X-Forwarded-For header
+Added a header to the REST client so your local instance accepts the requests:
+```diff
+  const rest = new REST({
+    version: API_VERSION,
+    api: API_BASE_URL,
++   headers: { "X-Forwarded-For": "127.0.0.1" },
+  }).setToken(token);
+```
+3. .env — Updated credentials
+```
+FLUXER_BOT_TOKEN — set to a token from your self-hosted instance's developer portal
+DATABASE_URL / POSTGRES_USER / POSTGRES_PASSWORD — pointed at your local Postgres with different credentials (fluxer-bot user instead of fluxer)
+```
+
 ## Running Locally
 
 ```bash
