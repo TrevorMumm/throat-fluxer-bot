@@ -9,6 +9,7 @@ import {
   startReminderScheduler,
   stopReminderScheduler,
 } from "./reminderScheduler.js";
+import { startSyncEngine, stopSyncEngine } from "./syncEngine.js";
 
 async function main() {
   const token = assertTokenPresent(BOT_TOKEN);
@@ -17,8 +18,10 @@ async function main() {
   await registerHandlers(client);
 
   startReminderScheduler(client);
+  startSyncEngine(client);
   const { shouldStop } = registerProcessHandlers(() => {
     stopReminderScheduler();
+    stopSyncEngine();
     return disconnectDb();
   });
   await runGatewayLoop(gateway, shouldStop);

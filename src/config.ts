@@ -15,3 +15,12 @@ if (!BOT_TOKEN) {
   );
   process.exit(1);
 }
+
+// ── Sync feature config ─────────────────────────────────────────────
+export const INSTANCE_ID = process.env.INSTANCE_ID || ""; // "A" or "B"
+export const PEER_API_BASE_URL = process.env.PEER_API_BASE_URL || "";
+export const PEER_BOT_TOKEN = process.env.PEER_BOT_TOKEN || "";
+export const SYNC_POLL_INTERVAL_MS = Number.parseInt(
+  process.env.SYNC_POLL_INTERVAL_MS ?? "3000",
+  10,
+);

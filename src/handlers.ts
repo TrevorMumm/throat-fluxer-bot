@@ -11,6 +11,9 @@ import { getSession } from "./pollSession.js";
 import { normalizePrefix } from "./prefix.js";
 import { handlePurgeReply } from "./purgeAllHandler.js";
 import { getPurgeSession } from "./purgeSession.js";
+import { handleSyncDM } from "./syncDmHandler.js";
+import { captureSyncEvent } from "./syncEngine.js";
+import { getSyncSession } from "./syncSession.js";
 
 const DEFAULT_PREFIX = normalizePrefix(process.env.COMMAND_PREFIX, "!");
 
@@ -65,11 +68,29 @@ export async function registerHandlers(client: Client): Promise<void> {
       }
     }
 
+    // ── Sync DM session routing ──
+    if (!guildId && message.author?.id) {
+      const syncSession = getSyncSession(message.author.id);
+      if (syncSession) {
+        const trimmed = message.content.trim().toLowerCase();
+        const prefix = normalizePrefix(undefined, DEFAULT_PREFIX) ?? "!";
+        if (trimmed === `${prefix}sync`) {
+          // Let it fall through to command handling below
+        } else {
+          await handleSyncDM(client, message as never);
+          return;
+        }
+      }
+    }
+
     // ── Purge-all session routing ──
     // If the user has an active purge-all confirmation session in this channel,
     // route their reply to the purge handler before treating it as a command.
     if (guildId && message.author?.id) {
-      const purgeSession = getPurgeSession(message.author.id, message.channel_id);
+      const purgeSession = getPurgeSession(
+        message.author.id,
+        message.channel_id,
+      );
       if (purgeSession) {
         const consumed = await handlePurgeReply(client, message as never);
         if (consumed) return;
@@ -85,6 +106,35 @@ export async function registerHandlers(client: Client): Promise<void> {
       : false;
 
     const usesTextPrefix = message.content.startsWith(prefix);
+
+    // ── Sync event capture ──
+    // Capture non-command messages for syncing to the peer instance.
+    if (!usesTextPrefix && !isMentionPrefix && guildId) {
+      try {
+        const raw = message as unknown as {
+          author?: { username?: string; avatar?: string };
+          attachments?: {
+            url: string;
+            filename: string;
+            content_type?: string;
+          }[];
+          embeds?: unknown[];
+        };
+        await captureSyncEvent(
+          message.channel_id,
+          message.id,
+          raw.author?.username ?? "Unknown",
+          raw.author?.avatar,
+          message.content,
+          raw.attachments ?? [],
+          raw.embeds ?? [],
+        );
+      } catch (error) {
+        console.error("[sync] Failed to capture event:", error);
+      }
+      return;
+    }
+
     if (!usesTextPrefix && !isMentionPrefix) return;
 
     if (!usesTextPrefix && !mentionPrefixRegex) return;

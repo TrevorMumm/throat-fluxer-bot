@@ -3,6 +3,8 @@ services:
     container_name: fluxer-bot-host2
     env_file:
       - .env.host2
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on: {}
     networks:
       - fluxer-bot_default

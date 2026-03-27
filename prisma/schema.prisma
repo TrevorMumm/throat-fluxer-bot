@@ -79,3 +79,63 @@ model BlackjackStats {
 
   @@index([userId])
 }
+
+// ── Sync feature ────────────────────────────────────────────────────
+
+model SyncConfig {
+  id              String           @id @default(cuid())
+  guildIdA        String           // Guild ID on instance A
+  guildIdB        String           // Guild ID on instance B
+  guildNameA      String           @default("")
+  guildNameB      String           @default("")
+  masterInstance  String           // "A" or "B"
+  status          String           @default("pending") // pending, initial_sync, active, stopped
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  channelMaps     SyncChannelMap[]
+
+  @@unique([guildIdA, guildIdB])
+}
+
+model SyncChannelMap {
+  id              String     @id @default(cuid())
+  syncConfigId    String
+  channelIdA      String     // Channel ID on instance A
+  channelIdB      String     // Channel ID on instance B
+  channelName     String     @default("")
+  webhookIdA      String?    // Webhook on instance A (for relaying B→A)
+  webhookTokenA   String?
+  webhookIdB      String?    // Webhook on instance B (for relaying A→B)
+  webhookTokenB   String?
+  syncConfig      SyncConfig @relation(fields: [syncConfigId], references: [id], onDelete: Cascade)
+
+  @@unique([channelIdA, channelIdB])
+  @@index([syncConfigId])
+  @@index([channelIdA])
+  @@index([channelIdB])
+}
+
+model SyncEvent {
+  id              Int      @id @default(autoincrement())
+  syncConfigId    String
+  sourceInstance  String   // "A" or "B" — which instance produced this event
+  eventType       String   // message_create, message_update, message_delete, channel_create, channel_delete, channel_update
+  channelId       String   // Source channel ID
+  messageId       String?  // Source message ID (if applicable)
+  authorName      String?
+  authorAvatar    String?
+  content         String?
+  attachments     Json?    // Array of { url, filename, content_type }
+  embeds          Json?
+  processed       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@index([processed, sourceInstance])
+  @@index([syncConfigId])
+}
+
+model SyncStop {
+  id        Int      @id @default(autoincrement())
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
