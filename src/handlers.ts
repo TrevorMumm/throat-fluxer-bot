@@ -12,7 +12,7 @@ import { normalizePrefix } from "./prefix.js";
 import { handlePurgeReply } from "./purgeAllHandler.js";
 import { getPurgeSession } from "./purgeSession.js";
 import { handleSyncDM } from "./syncDmHandler.js";
-import { captureSyncEvent } from "./syncEngine.js";
+import { captureChannelDeleteEvent, captureSyncEvent } from "./syncEngine.js";
 import { getSyncSession } from "./syncSession.js";
 
 const DEFAULT_PREFIX = normalizePrefix(process.env.COMMAND_PREFIX, "!");
@@ -215,6 +215,15 @@ export async function registerHandlers(client: Client): Promise<void> {
       );
     } catch (error) {
       console.error("Failed to handle poll reaction removal:", error);
+    }
+  });
+
+  // ── Channel delete handler (sync) ──
+  client.on(GatewayDispatchEvents.ChannelDelete, async ({ data }) => {
+    try {
+      await captureChannelDeleteEvent(data.id);
+    } catch (error) {
+      console.error("[sync] Failed to capture channel delete:", error);
     }
   });
 }

@@ -1,22 +1,38 @@
 import { REST } from "@discordjs/rest";
-import { API_VERSION, PEER_API_BASE_URL, PEER_BOT_TOKEN } from "./config.js";
+import { PEERS } from "./config.js";
 
-let peerRest: REST | null = null;
+const peerClients = new Map<string, REST>();
 
-export function getPeerRest(): REST | null {
-  if (!PEER_API_BASE_URL || !PEER_BOT_TOKEN) return null;
+/**
+ * Get the REST client for a specific peer instance.
+ * Returns null if the peer is not configured.
+ */
+export function getPeerRest(instanceId: string): REST | null {
+  const cached = peerClients.get(instanceId);
+  if (cached) return cached;
 
-  if (!peerRest) {
-    peerRest = new REST({
-      version: API_VERSION,
-      api: PEER_API_BASE_URL,
-      headers: { "X-Forwarded-For": "127.0.0.1" },
-    }).setToken(PEER_BOT_TOKEN);
-  }
+  const config = PEERS.get(instanceId);
+  if (!config) return null;
 
-  return peerRest;
+  const isFluxer = config.apiVersion === "1";
+
+  const rest = new REST({
+    version: config.apiVersion,
+    ...(isFluxer
+      ? { api: config.apiBaseUrl, headers: { "X-Forwarded-For": "127.0.0.1" } }
+      : {}),
+  }).setToken(config.botToken);
+
+  peerClients.set(instanceId, rest);
+  return rest;
 }
 
+/** Returns all configured peer instance IDs. */
+export function getPeerIds(): string[] {
+  return [...PEERS.keys()];
+}
+
+/** Returns true if at least one peer is configured. */
 export function hasPeerConfig(): boolean {
-  return !!PEER_API_BASE_URL && !!PEER_BOT_TOKEN;
+  return PEERS.size > 0;
 }

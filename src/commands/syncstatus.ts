@@ -1,6 +1,7 @@
 import { INSTANCE_ID } from "../config.js";
 import { getAllSyncConfigs, getSyncChannelMaps } from "../data/sync.js";
 import { isSyncEngineStopped } from "../syncEngine.js";
+import { instanceLabel } from "../syncLabels.js";
 import type { Command } from "../types/command.js";
 
 // Hidden command — not listed in !help
@@ -29,7 +30,7 @@ export const execute: Command["execute"] = async (
   const engineStatus = isSyncEngineStopped() ? "🛑 HALTED" : "✅ Running";
 
   const lines: string[] = [
-    `**Sync Status** (Instance ${INSTANCE_ID})`,
+    `**Sync Status** (Instance ${INSTANCE_ID} — ${instanceLabel(INSTANCE_ID)})`,
     `Engine: ${engineStatus}`,
     `━━━━━━━━━━━━━━━━━━━━`,
     "",
@@ -46,9 +47,10 @@ export const execute: Command["execute"] = async (
             : "⏸️";
 
     const channelMaps = await getSyncChannelMaps(config.id);
+    const tripletTag = config.tripletId ? " (triplet)" : "";
 
     lines.push(
-      `${statusIcon} **${config.guildNameA}** ↔ **${config.guildNameB}**`,
+      `${statusIcon} **${config.guildNameA}** (${config.instanceA}) ↔ **${config.guildNameB}** (${config.instanceB})${tripletTag}`,
       `  Status: **${config.status}** | Master: Instance ${config.masterInstance}`,
       `  Channels synced: ${channelMaps.length}`,
       `  Created: ${config.createdAt.toISOString().split("T")[0]}`,

@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .env
+.env.host2
+.env.host3
 .DS_Store
 npm-debug.log*
 bun.lockb

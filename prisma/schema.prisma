@@ -84,17 +84,24 @@ model BlackjackStats {
 
 model SyncConfig {
   id              String           @id @default(cuid())
-  guildIdA        String           // Guild ID on instance A
-  guildIdB        String           // Guild ID on instance B
+  guildIdA        String           // Guild ID on side A of this pair
+  guildIdB        String           // Guild ID on side B of this pair
   guildNameA      String           @default("")
   guildNameB      String           @default("")
-  masterInstance  String           // "A" or "B"
+  instanceA       String           @default("A") // Actual instance ID for side A (e.g. "A", "B", "C")
+  instanceB       String           @default("B") // Actual instance ID for side B (e.g. "A", "B", "C")
+  masterInstance  String           // "A", "B", or "C" — refers to actual instance ID
+  tripletId       String?          // Groups 3 pairs as a triplet (shared cuid)
   status          String           @default("pending") // pending, initial_sync, active, stopped
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   channelMaps     SyncChannelMap[]
+  syncEvents      SyncEvent[]
 
   @@unique([guildIdA, guildIdB])
+  @@index([instanceA])
+  @@index([instanceB])
+  @@index([tripletId])
 }
 
 model SyncChannelMap {
@@ -116,19 +123,21 @@ model SyncChannelMap {
 }
 
 model SyncEvent {
-  id              Int      @id @default(autoincrement())
+  id              Int        @id @default(autoincrement())
   syncConfigId    String
-  sourceInstance  String   // "A" or "B" — which instance produced this event
-  eventType       String   // message_create, message_update, message_delete, channel_create, channel_delete, channel_update
-  channelId       String   // Source channel ID
-  messageId       String?  // Source message ID (if applicable)
+  sourceInstance  String     // "A", "B", or "C" — which instance produced this event
+  originInstance  String?    // Original source instance (for loop detection in triplet sync)
+  eventType       String     // message_create, message_update, message_delete, channel_create, channel_delete, channel_update
+  channelId       String     // Source channel ID
+  messageId       String?    // Source message ID (if applicable)
   authorName      String?
   authorAvatar    String?
   content         String?
-  attachments     Json?    // Array of { url, filename, content_type }
+  attachments     Json?      // Array of { url, filename, content_type }
   embeds          Json?
-  processed       Boolean  @default(false)
-  createdAt       DateTime @default(now())
+  processed       Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+  syncConfig      SyncConfig @relation(fields: [syncConfigId], references: [id], onDelete: Cascade)
 
   @@index([processed, sourceInstance])
   @@index([syncConfigId])

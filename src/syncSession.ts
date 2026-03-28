@@ -1,10 +1,12 @@
 export type SyncSessionState =
-  | "awaiting_guild_a"
-  | "awaiting_guild_b"
-  | "awaiting_master"
-  | "confirm_1"
-  | "confirm_2"
-  | "confirm_3"
+  | "awaiting_mode"
+  | "awaiting_master_instance"
+  | "awaiting_master_guild"
+  | "awaiting_second_instance"
+  | "awaiting_second_guild"
+  | "awaiting_third_instance"
+  | "awaiting_third_guild"
+  | "confirm"
   | "syncing";
 
 export interface SyncGuildBasic {
@@ -17,17 +19,22 @@ export interface SyncGuildInfo {
   name: string;
   textChannelCount: number;
   voiceChannelCount: number;
-  messageEstimate?: number;
+  categoryCount: number;
+}
+
+export interface SyncInstanceSelection {
+  instanceId: string;
+  guild: SyncGuildInfo;
 }
 
 export interface SyncSession {
   state: SyncSessionState;
+  mode?: "pair" | "triplet";
   dmChannelId?: string;
-  guildsA?: SyncGuildBasic[];
-  guildsB?: SyncGuildBasic[];
-  guildInfoA?: SyncGuildInfo;
-  guildInfoB?: SyncGuildInfo;
-  masterInstance?: string;
+  /** Guild lists keyed by instance ID */
+  guildLists: Map<string, SyncGuildBasic[]>;
+  /** Ordered selections: [0]=master, [1]=second, [2]=third (triplet only) */
+  selections: SyncInstanceSelection[];
   createdAt: number;
 }
 
@@ -45,7 +52,9 @@ export function getSyncSession(userId: string): SyncSession | undefined {
 
 export function createSyncSession(userId: string): SyncSession {
   const session: SyncSession = {
-    state: "awaiting_master",
+    state: "awaiting_mode",
+    guildLists: new Map(),
+    selections: [],
     createdAt: Date.now(),
   };
   sessions.set(userId, session);
@@ -54,7 +63,7 @@ export function createSyncSession(userId: string): SyncSession {
 
 export function updateSyncSession(
   userId: string,
-  updates: Partial<SyncSession>,
+  updates: Partial<Omit<SyncSession, "guildLists" | "selections">>,
 ): SyncSession | undefined {
   const session = getSyncSession(userId);
   if (!session) return undefined;

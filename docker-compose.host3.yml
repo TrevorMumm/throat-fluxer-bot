@@ -1,13 +1,13 @@
 services:
-  fluxer-bot-host2:
+  fluxer-bot-host3:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: fluxer-bot-host2
+    container_name: fluxer-bot-host3
     restart: unless-stopped
     command: ["sh", "-c", "bunx prisma migrate deploy && bun src/index.ts"]
     env_file:
-      - .env.host2
+      - .env.host3
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

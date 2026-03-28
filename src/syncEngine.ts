@@ -5,12 +5,14 @@ import {
   checkSyncStop,
   clearSyncStop,
   createSyncEvent,
-  findChannelMapBySource,
+  deleteSyncChannelMap,
+  findAllChannelMapsBySource,
+  findChannelMapInConfig,
+  getSyncConfig,
   getUnprocessedEvents,
   markEventProcessed,
   stopAllSyncs,
 } from "./data/sync.js";
-import { getPeerRest } from "./peerClient.js";
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let stopped = false;
@@ -28,24 +30,54 @@ export async function captureSyncEvent(
 ): Promise<void> {
   if (!INSTANCE_ID || stopped) return;
 
-  const mapping = await findChannelMapBySource(channelId, INSTANCE_ID);
-  if (!mapping) return;
+  // Find ALL channel maps where this channel is on our instance's side.
+  // A channel can belong to multiple pairs (e.g. A-B and A-C).
+  const mappings = await findAllChannelMapsBySource(channelId, INSTANCE_ID);
+  if (mappings.length === 0) return;
 
-  await createSyncEvent({
-    syncConfigId: mapping.syncConfigId,
-    sourceInstance: INSTANCE_ID,
-    eventType: "message_create",
-    channelId,
-    messageId,
-    authorName,
-    authorAvatar,
-    content: content || undefined,
-    attachments: attachments.length > 0 ? attachments : undefined,
-    embeds:
-      embeds.length > 0
-        ? (embeds as { [key: string]: string | number | boolean | null }[])
-        : undefined,
-  });
+  for (const mapping of mappings) {
+    await createSyncEvent({
+      syncConfigId: mapping.syncConfigId,
+      sourceInstance: INSTANCE_ID,
+      originInstance: INSTANCE_ID,
+      eventType: "message_create",
+      channelId,
+      messageId,
+      authorName,
+      authorAvatar,
+      content: content || undefined,
+      attachments: attachments.length > 0 ? attachments : undefined,
+      embeds:
+        embeds.length > 0
+          ? (embeds as { [key: string]: string | number | boolean | null }[])
+          : undefined,
+    });
+  }
+}
+
+// ── Channel delete capture (called from handlers.ts on ChannelDelete) ──
+
+export async function captureChannelDeleteEvent(
+  channelId: string,
+): Promise<void> {
+  if (!INSTANCE_ID || stopped) return;
+
+  const mappings = await findAllChannelMapsBySource(channelId, INSTANCE_ID);
+  if (mappings.length === 0) return;
+
+  for (const mapping of mappings) {
+    await createSyncEvent({
+      syncConfigId: mapping.syncConfigId,
+      sourceInstance: INSTANCE_ID,
+      originInstance: INSTANCE_ID,
+      eventType: "channel_delete",
+      channelId,
+    });
+  }
+
+  console.log(
+    `[sync] Captured channel_delete for channel ${channelId} (${mappings.length} pair(s))`,
+  );
 }
 
 // ── Event processing (polls the database) ───────────────────────────
@@ -68,13 +100,11 @@ async function processEvents(client: Client): Promise<void> {
     const events = await getUnprocessedEvents(INSTANCE_ID);
     if (events.length === 0) return;
 
-    const peer = getPeerRest();
-
     for (const event of events) {
       if (stopped) break;
 
       try {
-        await processOneEvent(client, peer, event);
+        await processOneEvent(client, event);
         await markEventProcessed(event.id);
       } catch (error) {
         console.error(`[sync] Failed to process event ${event.id}:`, error);
@@ -88,11 +118,11 @@ async function processEvents(client: Client): Promise<void> {
 
 async function processOneEvent(
   client: Client,
-  peer: REST | null,
   event: {
     id: number;
     syncConfigId: string;
     sourceInstance: string;
+    originInstance: string | null;
     eventType: string;
     channelId: string;
     messageId: string | null;
@@ -103,20 +133,103 @@ async function processOneEvent(
     embeds: unknown;
   },
 ): Promise<void> {
+  // Loop detection: if this event originally came from us, skip it
+  if (event.originInstance === INSTANCE_ID) return;
+
+  // Get the sync config to determine which instances are paired
+  const config = await getSyncConfig(event.syncConfigId);
+  if (!config) return;
+
+  // Determine which side of the pair is the source and which is the target
+  const isSourceSideA = config.instanceA === event.sourceInstance;
+  const targetInstance = isSourceSideA ? config.instanceB : config.instanceA;
+
+  // Only process if WE are the target instance
+  if (targetInstance !== INSTANCE_ID) return;
+
+  if (event.eventType === "channel_delete") {
+    await processChannelDelete(client, event, isSourceSideA);
+    return;
+  }
+
   if (event.eventType !== "message_create") return;
 
-  // Find the channel mapping to know where to relay
-  const sourceInstance = event.sourceInstance;
-  const mapping = await findChannelMapBySource(event.channelId, sourceInstance);
+  await processMessageCreate(client, event, isSourceSideA);
+}
+
+async function processChannelDelete(
+  client: Client,
+  event: {
+    id: number;
+    syncConfigId: string;
+    channelId: string;
+    sourceInstance: string;
+  },
+  isSourceSideA: boolean,
+): Promise<void> {
+  const mapping = await findChannelMapInConfig(
+    event.channelId,
+    event.syncConfigId,
+    event.sourceInstance,
+  );
+  if (!mapping) return;
+
+  const targetChannelId = isSourceSideA
+    ? mapping.channelIdB
+    : mapping.channelIdA;
+
+  // Delete the channel on our local instance
+  try {
+    await client.api.channels.delete(targetChannelId);
+    console.log(
+      `[sync] Deleted paired channel ${targetChannelId} (source channel ${event.channelId} was deleted)`,
+    );
+  } catch (error) {
+    console.error(
+      `[sync] Failed to delete paired channel ${targetChannelId}:`,
+      error,
+    );
+  }
+
+  // Remove the channel map entry
+  try {
+    await deleteSyncChannelMap(mapping.id);
+  } catch (error) {
+    console.error(`[sync] Failed to remove channel map ${mapping.id}:`, error);
+  }
+}
+
+async function processMessageCreate(
+  client: Client,
+  event: {
+    id: number;
+    syncConfigId: string;
+    sourceInstance: string;
+    channelId: string;
+    authorName: string | null;
+    authorAvatar: string | null;
+    content: string | null;
+    attachments: unknown;
+    embeds: unknown;
+  },
+  isSourceSideA: boolean,
+): Promise<void> {
+  // Find the channel mapping within this specific config
+  const mapping = await findChannelMapInConfig(
+    event.channelId,
+    event.syncConfigId,
+    event.sourceInstance,
+  );
   if (!mapping) return;
 
   // Determine target channel and webhook
-  const targetIsA = sourceInstance === "B";
-  const targetChannelId = targetIsA ? mapping.channelIdA : mapping.channelIdB;
-  const webhookId = targetIsA ? mapping.webhookIdA : mapping.webhookIdB;
-  const webhookToken = targetIsA
-    ? mapping.webhookTokenA
-    : mapping.webhookTokenB;
+  const targetChannelId = isSourceSideA
+    ? mapping.channelIdB
+    : mapping.channelIdA;
+  const webhookId = isSourceSideA ? mapping.webhookIdB : mapping.webhookIdA;
+  const webhookToken = isSourceSideA
+    ? mapping.webhookTokenB
+    : mapping.webhookTokenA;
 
   // Build the message payload
   const body: Record<string, unknown> = {};
@@ -125,8 +238,7 @@ async function processOneEvent(
   if (event.authorAvatar) body.avatar_url = event.authorAvatar;
   if (event.embeds) body.embeds = event.embeds;
 
-  // Handle attachments — download from source, include URLs for now
-  // Fluxer webhooks should handle external URLs in content
+  // Handle attachments
   const attachments = event.attachments as
     | { url: string; filename: string; content_type?: string }[]
     | null;
@@ -135,7 +247,6 @@ async function processOneEvent(
     body.content = "";
   }
 
-  // Append attachment URLs to content if we can't upload via webhook
   if (attachments && attachments.length > 0) {
     const urls = attachments.map((a) => a.url).join("\n");
     body.content = body.content ? `${body.content}\n${urls}` : urls;
@@ -146,14 +257,7 @@ async function processOneEvent(
   // Try webhook first (preserves author), fall back to regular message
   if (webhookId && webhookToken) {
     try {
-      await executeWebhook(
-        client,
-        peer,
-        targetIsA,
-        webhookId,
-        webhookToken,
-        body,
-      );
+      await executeWebhook(client, webhookId, webhookToken, body);
       return;
     } catch (error) {
       console.error(
@@ -170,21 +274,11 @@ async function processOneEvent(
   const fallbackContent = `${authorDisplay}: ${body.content || ""}`;
 
   try {
-    if (targetIsA && INSTANCE_ID === "A") {
-      await client.api.channels.createMessage(targetChannelId, {
-        content: fallbackContent,
-        allowed_mentions: { parse: [] },
-      });
-    } else if (!targetIsA && INSTANCE_ID === "B") {
-      await client.api.channels.createMessage(targetChannelId, {
-        content: fallbackContent,
-        allowed_mentions: { parse: [] },
-      });
-    } else if (peer) {
-      await peer.post(`/channels/${targetChannelId}/messages`, {
-        body: { content: fallbackContent, allowed_mentions: { parse: [] } },
-      });
-    }
+    // Target is always our local instance (we only process events targeted at us)
+    await client.api.channels.createMessage(targetChannelId, {
+      content: fallbackContent,
+      allowed_mentions: { parse: [] },
+    });
   } catch (error) {
     console.error(
       `[sync] Fallback message send failed for event ${event.id}:`,
@@ -195,21 +289,13 @@ async function processOneEvent(
 
 async function executeWebhook(
   client: Client,
-  peer: REST | null,
-  targetIsLocal: boolean,
   webhookId: string,
   webhookToken: string,
   body: Record<string, unknown>,
 ): Promise<void> {
-  // The webhook lives on the target instance
-  if (targetIsLocal && INSTANCE_ID === (targetIsLocal ? "A" : "B")) {
-    // Target is our local instance — use our REST client
-    // discord.js core doesn't have a direct webhook execute, use raw REST
-    const rest = (client as unknown as { rest: REST }).rest;
-    await rest.post(`/webhooks/${webhookId}/${webhookToken}`, { body });
-  } else if (peer) {
-    await peer.post(`/webhooks/${webhookId}/${webhookToken}`, { body });
-  }
+  // Target is always our local instance, so use our own REST client
+  const rest = (client as unknown as { rest: REST }).rest;
+  await rest.post(`/webhooks/${webhookId}/${webhookToken}`, { body });
 }
 
 // ── Engine lifecycle ────────────────────────────────────────────────

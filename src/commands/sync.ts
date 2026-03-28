@@ -1,5 +1,6 @@
-import { API_BASE_URL, INSTANCE_ID, PEER_API_BASE_URL } from "../config.js";
+import { INSTANCE_ID, PEERS } from "../config.js";
 import { getPeerRest, hasPeerConfig } from "../peerClient.js";
+import { instanceLabel } from "../syncLabels.js";
 import { createSyncSession } from "../syncSession.js";
 import type { Command } from "../types/command.js";
 
@@ -23,7 +24,7 @@ export const execute: Command["execute"] = async (
   if (!hasPeerConfig()) {
     await client.api.channels.createMessage(message.channel_id, {
       content:
-        "Sync is not configured. Set `PEER_API_BASE_URL` and `PEER_BOT_TOKEN` in your environment.",
+        "Sync is not configured. Set peer environment variables (e.g. `PEER_B_API_BASE_URL`).",
     });
     return;
   }
@@ -51,76 +52,93 @@ export const execute: Command["execute"] = async (
   }
 
   await client.api.channels.createMessage(dm.id, {
-    content: "Scanning both Fluxer instances...",
+    content: "Scanning all configured instances...",
   });
 
-  // Fetch guilds from both instances
-  const labelA = INSTANCE_ID === "A" ? API_BASE_URL : PEER_API_BASE_URL;
-  const _labelB = INSTANCE_ID === "A" ? PEER_API_BASE_URL : API_BASE_URL;
+  // Fetch guilds from each instance
+  type GuildList = { id: string; name: string }[];
+  const guildsByInstance = new Map<string, GuildList>();
 
-  let guildsLocal: { id: string; name: string }[];
-  let guildsPeer: { id: string; name: string }[];
-
+  // Local instance
   try {
-    guildsLocal = (await client.api.users.getGuilds()) as unknown as {
-      id: string;
-      name: string;
-    }[];
+    const guilds = (await client.api.users.getGuilds()) as unknown as GuildList;
+    guildsByInstance.set(INSTANCE_ID, guilds);
   } catch (error) {
     await client.api.channels.createMessage(dm.id, {
-      content: `Failed to fetch local guilds: ${error instanceof Error ? error.message : "unknown error"}`,
+      content: `Failed to fetch local guilds (Instance ${INSTANCE_ID}): ${error instanceof Error ? error.message : "unknown error"}`,
     });
     return;
   }
 
-  try {
-    const peer = getPeerRest();
-    if (!peer) throw new Error("Peer API not configured");
-    guildsPeer = (await peer.get("/users/@me/guilds")) as {
-      id: string;
-      name: string;
-    }[];
-  } catch (error) {
-    await client.api.channels.createMessage(dm.id, {
-      content: `Failed to fetch peer guilds: ${error instanceof Error ? error.message : "unknown error"}`,
-    });
-    return;
+  // Peer instances
+  for (const peerId of PEERS.keys()) {
+    const peer = getPeerRest(peerId);
+    if (!peer) continue;
+    try {
+      const guilds = (await peer.get("/users/@me/guilds")) as GuildList;
+      guildsByInstance.set(peerId, guilds);
+    } catch (error) {
+      await client.api.channels.createMessage(dm.id, {
+        content: `Failed to fetch guilds from Instance ${peerId} (${instanceLabel(peerId)}): ${error instanceof Error ? error.message : "unknown error"}`,
+      });
+      return;
+    }
   }
 
-  // Assign A/B based on INSTANCE_ID
-  const guildsA = INSTANCE_ID === "A" ? guildsLocal : guildsPeer;
-  const guildsB = INSTANCE_ID === "A" ? guildsPeer : guildsLocal;
-
-  if (guildsA.length === 0) {
-    await client.api.channels.createMessage(dm.id, {
-      content: "Instance A bot is not in any servers.",
-    });
-    return;
-  }
-
-  if (guildsB.length === 0) {
-    await client.api.channels.createMessage(dm.id, {
-      content: "Instance B bot is not in any servers.",
-    });
-    return;
+  // Validate all instances have guilds
+  for (const [id, guilds] of guildsByInstance) {
+    if (guilds.length === 0) {
+      await client.api.channels.createMessage(dm.id, {
+        content: `Instance ${id} (${instanceLabel(id)}) bot is not in any servers.`,
+      });
+      return;
+    }
   }
 
   // Create session and store guild lists
   const session = createSyncSession(userId);
-  session.guildsA = guildsA;
-  session.guildsB = guildsB;
   session.dmChannelId = dm.id;
-  session.state = "awaiting_guild_a";
+  for (const [id, guilds] of guildsByInstance) {
+    session.guildLists.set(id, guilds);
+  }
 
-  // Present Instance A guild list
-  const listA = guildsA.map((g, i) => `**${i + 1}.** ${g.name}`).join("\n");
+  const instanceIds = [...guildsByInstance.keys()].sort();
+
+  // If only 2 instances, skip mode selection
+  if (instanceIds.length <= 2) {
+    session.mode = "pair";
+    session.state = "awaiting_master_instance";
+
+    const instanceList = instanceIds
+      .map((id, i) => `**${i + 1}.** Instance ${id} — ${instanceLabel(id)}`)
+      .join("\n");
+
+    await client.api.channels.createMessage(dm.id, {
+      content:
+        `Found **${instanceIds.length} instances** configured.\n\n` +
+        `Which instance should be the **MASTER** (source of truth)?\n` +
+        `The master's channels will be mirrored to the other instance.\n\n` +
+        `${instanceList}\n\n` +
+        `Type the number, or **cancel** to abort.`,
+    });
+    return;
+  }
+
+  // 3+ instances — ask pair or triplet
+  const instanceList = instanceIds
+    .map(
+      (id) =>
+        `  • **Instance ${id}** — ${instanceLabel(id)} (${guildsByInstance.get(id)?.length} servers)`,
+    )
+    .join("\n");
 
   await client.api.channels.createMessage(dm.id, {
     content:
-      `**Instance A** — ${labelA}\n` +
-      `The bot has access to ${guildsA.length} server(s):\n\n` +
-      `${listA}\n\n` +
-      `Which server on **Instance A** should be synced?\n` +
-      `Type the number, or **cancel** to abort.`,
+      `Found **${instanceIds.length} instances** configured:\n\n` +
+      `${instanceList}\n\n` +
+      `How would you like to sync?\n\n` +
+      `**1.** Pair — sync 2 instances together\n` +
+      `**2.** Triplet — sync all 3 instances together\n\n` +
+      `Type **1** or **2**, or **cancel** to abort.`,
   });
 };

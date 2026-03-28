@@ -8,13 +8,19 @@ export async function createSyncConfig(input: {
   guildIdB: string;
   guildNameA: string;
   guildNameB: string;
+  instanceA: string;
+  instanceB: string;
   masterInstance: string;
+  tripletId?: string;
   status?: string;
 }): Promise<SyncConfig> {
   // Delete old channel maps and config for this guild pair so we start fresh
   const existing = await findSyncConfigByGuilds(input.guildIdA, input.guildIdB);
   if (existing) {
     await prisma.syncChannelMap.deleteMany({
+      where: { syncConfigId: existing.id },
+    });
+    await prisma.syncEvent.deleteMany({
       where: { syncConfigId: existing.id },
     });
     await prisma.syncConfig.delete({ where: { id: existing.id } });
@@ -26,7 +32,10 @@ export async function createSyncConfig(input: {
       guildIdB: input.guildIdB,
       guildNameA: input.guildNameA,
       guildNameB: input.guildNameB,
+      instanceA: input.instanceA,
+      instanceB: input.instanceB,
       masterInstance: input.masterInstance,
+      tripletId: input.tripletId,
       status: input.status ?? "pending",
     },
   });
@@ -67,6 +76,18 @@ export async function findSyncConfigByGuilds(
   });
 }
 
+/** Find all active SyncConfigs that involve a given instance. */
+export async function getActiveConfigsForInstance(
+  instanceId: string,
+): Promise<SyncConfig[]> {
+  return prisma.syncConfig.findMany({
+    where: {
+      status: { in: ["active", "initial_sync"] },
+      OR: [{ instanceA: instanceId }, { instanceB: instanceId }],
+    },
+  });
+}
+
 // ── SyncChannelMap ──────────────────────────────────────────────────
 
 export async function createSyncChannelMap(input: {
@@ -88,18 +109,59 @@ export async function getSyncChannelMaps(
   return prisma.syncChannelMap.findMany({ where: { syncConfigId } });
 }
 
+/**
+ * Find ALL channel maps where the given channel belongs to the given instance.
+ * A channel can appear in multiple pairs (e.g. A-B and A-C for instance A).
+ */
+export async function findAllChannelMapsBySource(
+  channelId: string,
+  instance: string,
+): Promise<(SyncChannelMap & { syncConfig: SyncConfig })[]> {
+  return prisma.syncChannelMap.findMany({
+    where: {
+      syncConfig: { status: { in: ["active", "initial_sync"] } },
+      OR: [
+        { channelIdA: channelId, syncConfig: { instanceA: instance } },
+        { channelIdB: channelId, syncConfig: { instanceB: instance } },
+      ],
+    },
+    include: { syncConfig: true },
+  });
+}
+
+/**
+ * Find a single channel map by source channel within a specific sync config.
+ */
+export async function findChannelMapInConfig(
+  channelId: string,
+  syncConfigId: string,
+  sourceInstance: string,
+): Promise<(SyncChannelMap & { syncConfig: SyncConfig }) | null> {
+  // Determine which side the source is on
+  const config = await prisma.syncConfig.findUnique({
+    where: { id: syncConfigId },
+  });
+  if (!config) return null;
+
+  const field =
+    config.instanceA === sourceInstance ? "channelIdA" : "channelIdB";
+  return prisma.syncChannelMap.findFirst({
+    where: { syncConfigId, [field]: channelId },
+    include: { syncConfig: true },
+  });
+}
+
+/** @deprecated Use findAllChannelMapsBySource instead for multi-instance sync. */
 export async function findChannelMapBySource(
   channelId: string,
   instance: string,
 ): Promise<(SyncChannelMap & { syncConfig: SyncConfig }) | null> {
-  const field = instance === "A" ? "channelIdA" : "channelIdB";
-  return prisma.syncChannelMap.findFirst({
-    where: {
-      [field]: channelId,
-      syncConfig: { status: { in: ["active", "initial_sync"] } },
-    },
-    include: { syncConfig: true },
-  });
+  const results = await findAllChannelMapsBySource(channelId, instance);
+  return results[0] ?? null;
+}
+
+export async function deleteSyncChannelMap(id: string): Promise<void> {
+  await prisma.syncChannelMap.delete({ where: { id } });
 }
 
 export async function updateChannelMapWebhook(
@@ -119,6 +181,7 @@ export async function updateChannelMapWebhook(
 export async function createSyncEvent(input: {
   syncConfigId: string;
   sourceInstance: string;
+  originInstance?: string;
   eventType: string;
   channelId: string;
   messageId?: string;
@@ -132,6 +195,7 @@ export async function createSyncEvent(input: {
     data: {
       syncConfigId: input.syncConfigId,
       sourceInstance: input.sourceInstance,
+      originInstance: input.originInstance ?? input.sourceInstance,
       eventType: input.eventType,
       channelId: input.channelId,
       messageId: input.messageId,
@@ -148,14 +212,23 @@ export async function createSyncEvent(input: {
   });
 }
 
+/**
+ * Get unprocessed events for this instance to consume.
+ * Fetches events from ALL non-self instances in pairs where this instance participates.
+ */
 export async function getUnprocessedEvents(
   targetInstance: string,
   limit = 50,
 ): Promise<SyncEvent[]> {
-  // Get events from the OTHER instance that haven't been processed yet
-  const sourceInstance = targetInstance === "A" ? "B" : "A";
   return prisma.syncEvent.findMany({
-    where: { processed: false, sourceInstance },
+    where: {
+      processed: false,
+      sourceInstance: { not: targetInstance },
+      syncConfig: {
+        status: { in: ["active", "initial_sync"] },
+        OR: [{ instanceA: targetInstance }, { instanceB: targetInstance }],
+      },
+    },
     orderBy: { createdAt: "asc" },
     take: limit,
   });
